@@ -1,0 +1,398 @@
+{
+  "dataset_id": "JARDINES-DEL-BOSQUE-2026-01",
+  "version": 1,
+  "currency": "MXN",
+  "notes": [
+    "Datos recopilados manualmente por el usuario; no verificados independientemente.",
+    "CASA-03 y CASA-09 son probable duplicado, no duplicado confirmado.",
+    "Superficies ambiguas no deben usarse para cálculo por m².",
+    "Precios son de publicación, no precios de cierre."
+  ],
+  "properties": [
+    {
+      "id": "CASA-01",
+      "source": "Propiedades.com",
+      "source_id": "27175383",
+      "url": "https://propiedades.com/inmuebles/casa-en-venta-blvd-zacatecas-jardines-del-bosque-sinaloa-27175383",
+      "price_mxn": 431085,
+      "location": {
+        "neighborhood": "Jardines del Bosque",
+        "municipality": "Ahome",
+        "state": "Sinaloa",
+        "postal_code": "81248",
+        "country": "México"
+      },
+      "land_m2": 124,
+      "construction_m2": 90,
+      "unknown_surface_m2": null,
+      "bedrooms": 2,
+      "bathrooms": 1,
+      "half_bathrooms": null,
+      "parking_spaces": 1,
+      "floors": 1,
+      "raw_data": {
+        "construction_m2": 90
+      },
+      "source_conflicts": [],
+      "duplicate_group": null,
+      "duplicate_status": "candidate",
+      "quality_notes": [
+        "Possible price anomaly; verify listing conditions."
+      ],
+      "condition": null,
+      "legal_status": null,
+      "occupancy_status": null
+    },
+    {
+      "id": "CASA-02",
+      "source": "Propiedades.com",
+      "source_id": "31159669",
+      "url": "https://propiedades.com/inmuebles/casa-en-venta-jardines-del-bosque-jardines-del-bosque-sinaloa-31159669",
+      "price_mxn": 1450000,
+      "location": {
+        "neighborhood": "Jardines del Bosque",
+        "municipality": "Ahome",
+        "state": "Sinaloa",
+        "postal_code": "81248",
+        "country": "México"
+      },
+      "land_m2": 119,
+      "construction_m2": 88,
+      "unknown_surface_m2": null,
+      "bedrooms": 2,
+      "bathrooms": 1,
+      "half_bathrooms": null,
+      "parking_spaces": null,
+      "floors": 1,
+      "raw_data": {
+        "land_m2": 119,
+        "construction_m2": 88
+      },
+      "source_conflicts": [],
+      "duplicate_group": null,
+      "duplicate_status": "candidate",
+      "quality_notes": [],
+      "condition": null,
+      "legal_status": null,
+      "occupancy_status": null
+    },
+    {
+      "id": "CASA-03",
+      "source": "Propiedades.com",
+      "source_id": "30803402",
+      "url": "https://propiedades.com/inmuebles/casa-en-venta-jardines-del-bosque-sinaloa-30803402",
+      "price_mxn": 2350000,
+      "location": {
+        "neighborhood": "Jardines del Bosque",
+        "municipality": "Ahome",
+        "state": "Sinaloa",
+        "postal_code": "81248",
+        "country": "México"
+      },
+      "land_m2": 107.18,
+      "construction_m2": 144,
+      "unknown_surface_m2": null,
+      "bedrooms": 4,
+      "bathrooms": 4,
+      "half_bathrooms": null,
+      "parking_spaces": 1,
+      "floors": 2,
+      "raw_data": {
+        "land_m2": 107.18,
+        "construction_m2": 144
+      },
+      "source_conflicts": [],
+      "duplicate_group": "DUP-002",
+      "duplicate_status": "probable_duplicate",
+      "quality_notes": [
+        "Probable duplicate of CASA-09."
+      ],
+      "condition": null,
+      "legal_status": null,
+      "occupancy_status": null
+    },
+    {
+      "id": "CASA-04",
+      "source": "Propiedades.com",
+      "source_id": "31134727",
+      "url": "https://propiedades.com/inmuebles/casa-en-venta-c-bosque-de-araucarias-1982-jardines-del-bosque-81248-los-mochis-sin-mexico-al-1900-1982-jardines-del-bosque-sinaloa-31134727",
+      "price_mxn": 1100000,
+      "location": {
+        "neighborhood": "Jardines del Bosque",
+        "municipality": "Ahome",
+        "state": "Sinaloa",
+        "postal_code": "81248",
+        "country": "México"
+      },
+      "land_m2": 160,
+      "construction_m2": null,
+      "unknown_surface_m2": null,
+      "bedrooms": null,
+      "bathrooms": 2,
+      "half_bathrooms": null,
+      "parking_spaces": 2,
+      "floors": 1,
+      "raw_data": {
+        "construction_m2": 0
+      },
+      "source_conflicts": [],
+      "duplicate_group": null,
+      "duplicate_status": "candidate",
+      "quality_notes": [
+        "Source construction value 0 normalized to null; raw value preserved."
+      ],
+      "condition": null,
+      "legal_status": null,
+      "occupancy_status": null
+    },
+    {
+      "id": "CASA-05",
+      "source": "Lamudi",
+      "source_id": "41032-73-7cfbfcd06acb-34aa-19f6cce-88c2-756d",
+      "url": "https://www.lamudi.com.mx/detalle/41032-73-7cfbfcd06acb-34aa-19f6cce-88c2-756d",
+      "price_mxn": 638190,
+      "location": {
+        "neighborhood": "Jardines del Bosque",
+        "municipality": "Ahome",
+        "state": "Sinaloa",
+        "postal_code": "81248",
+        "country": "México"
+      },
+      "land_m2": 100,
+      "construction_m2": null,
+      "unknown_surface_m2": 80,
+      "bedrooms": 2,
+      "bathrooms": 1,
+      "half_bathrooms": 1,
+      "parking_spaces": null,
+      "floors": null,
+      "raw_data": {
+        "unspecified_surface_m2": 80,
+        "land_m2": 100
+      },
+      "source_conflicts": [],
+      "duplicate_group": null,
+      "duplicate_status": "candidate",
+      "quality_notes": [
+        "80 m² surface type unspecified."
+      ],
+      "condition": null,
+      "legal_status": null,
+      "occupancy_status": null
+    },
+    {
+      "id": "CASA-06",
+      "source": "Lamudi",
+      "source_id": "41032-73-45fd34f5b0c9-23af-19d9d55-abb8-70a2",
+      "url": "https://www.lamudi.com.mx/detalle/41032-73-45fd34f5b0c9-23af-19d9d55-abb8-70a2",
+      "price_mxn": 430000,
+      "location": {
+        "neighborhood": "Jardines del Bosque",
+        "municipality": "Ahome",
+        "state": "Sinaloa",
+        "postal_code": "81248",
+        "country": "México"
+      },
+      "land_m2": null,
+      "construction_m2": null,
+      "unknown_surface_m2": 200,
+      "bedrooms": 3,
+      "bathrooms": 2,
+      "half_bathrooms": null,
+      "parking_spaces": 2,
+      "floors": null,
+      "raw_data": {
+        "unspecified_surface_m2": 200
+      },
+      "source_conflicts": [],
+      "duplicate_group": null,
+      "duplicate_status": "candidate",
+      "quality_notes": [
+        "200 m² type unspecified."
+      ],
+      "condition": null,
+      "legal_status": null,
+      "occupancy_status": null
+    },
+    {
+      "id": "CASA-07",
+      "source": "Lamudi",
+      "source_id": "41032-73-6424f7a6d0c1-cf93-1a0f3f0-9b49-76a8",
+      "url": "https://www.lamudi.com.mx/detalle/41032-73-6424f7a6d0c1-cf93-1a0f3f0-9b49-76a8",
+      "price_mxn": 531056,
+      "location": {
+        "neighborhood": "Jardines del Bosque",
+        "municipality": "Ahome",
+        "state": "Sinaloa",
+        "postal_code": "81248",
+        "country": "México"
+      },
+      "land_m2": 100,
+      "construction_m2": 70,
+      "unknown_surface_m2": null,
+      "bedrooms": 2,
+      "bathrooms": 1,
+      "half_bathrooms": null,
+      "parking_spaces": null,
+      "floors": null,
+      "raw_data": {
+        "surfaces_m2": [
+          70,
+          100
+        ]
+      },
+      "source_conflicts": [],
+      "duplicate_group": null,
+      "duplicate_status": "candidate",
+      "quality_notes": [
+        "Surface mapping 100 land / 70 construction is provisional."
+      ],
+      "condition": null,
+      "legal_status": null,
+      "occupancy_status": null
+    },
+    {
+      "id": "CASA-08",
+      "source": "Lamudi",
+      "source_id": "41032-73-efbf6bafe912-7348-1a0fe26-9360-7089",
+      "url": "https://www.lamudi.com.mx/detalle/41032-73-efbf6bafe912-7348-1a0fe26-9360-7089",
+      "price_mxn": 531056,
+      "location": {
+        "neighborhood": "Jardines del Bosque",
+        "municipality": "Ahome",
+        "state": "Sinaloa",
+        "postal_code": "81248",
+        "country": "México"
+      },
+      "land_m2": null,
+      "construction_m2": null,
+      "unknown_surface_m2": null,
+      "bedrooms": 2,
+      "bathrooms": 1,
+      "half_bathrooms": null,
+      "parking_spaces": null,
+      "floors": null,
+      "raw_data": {},
+      "source_conflicts": [],
+      "duplicate_group": null,
+      "duplicate_status": "candidate",
+      "quality_notes": [
+        "No surface data."
+      ],
+      "condition": null,
+      "legal_status": null,
+      "occupancy_status": null
+    },
+    {
+      "id": "CASA-09",
+      "source": "Century 21",
+      "source_id": "606362",
+      "url": "https://century21mexico.com/propiedad/606362_casa-en-venta-ceiba-nigras-2206-jardines-del-bosque",
+      "price_mxn": 2350000,
+      "location": {
+        "neighborhood": "Jardines del Bosque",
+        "municipality": "Ahome",
+        "state": "Sinaloa",
+        "postal_code": "81248",
+        "country": "México"
+      },
+      "land_m2": 107.2,
+      "construction_m2": 144.2,
+      "unknown_surface_m2": null,
+      "bedrooms": 4,
+      "bathrooms": 4,
+      "half_bathrooms": null,
+      "parking_spaces": 1,
+      "floors": null,
+      "raw_data": {
+        "land_m2": 107.2,
+        "construction_m2": 144.2
+      },
+      "source_conflicts": [],
+      "duplicate_group": "DUP-002",
+      "duplicate_status": "probable_duplicate",
+      "quality_notes": [
+        "Probable duplicate of CASA-03."
+      ],
+      "condition": null,
+      "legal_status": null,
+      "occupancy_status": null
+    },
+    {
+      "id": "CASA-10",
+      "source": "RE/MAX",
+      "source_id": "655990",
+      "url": "https://remax.com.mx/propiedad/655990",
+      "price_mxn": 4250000,
+      "location": {
+        "neighborhood": "Jardines del Bosque",
+        "municipality": "Ahome",
+        "state": "Sinaloa",
+        "postal_code": "81248",
+        "country": "México"
+      },
+      "land_m2": 170.76,
+      "construction_m2": 88.78,
+      "unknown_surface_m2": null,
+      "bedrooms": 2,
+      "bathrooms": 2,
+      "half_bathrooms": null,
+      "parking_spaces": 2,
+      "floors": 2,
+      "raw_data": {
+        "land_m2": 170.76,
+        "construction_m2": 88.78
+      },
+      "source_conflicts": [],
+      "duplicate_group": null,
+      "duplicate_status": "candidate",
+      "quality_notes": [
+        "High asking price relative to sample; not automatically excluded."
+      ],
+      "condition": null,
+      "legal_status": null,
+      "occupancy_status": null
+    },
+    {
+      "id": "CASA-11",
+      "source": "RE/MAX",
+      "source_id": "651226",
+      "url": "https://remax.com.mx/propiedad/651226",
+      "price_mxn": 1900000,
+      "location": {
+        "neighborhood": "Jardines del Bosque",
+        "municipality": "Ahome",
+        "state": "Sinaloa",
+        "postal_code": "81248",
+        "country": "México"
+      },
+      "land_m2": 151.65,
+      "construction_m2": 106.16,
+      "unknown_surface_m2": null,
+      "bedrooms": 2,
+      "bathrooms": 1,
+      "half_bathrooms": null,
+      "parking_spaces": null,
+      "floors": 1,
+      "raw_data": {
+        "description_bedrooms": 2,
+        "structured_bedrooms": 1
+      },
+      "source_conflicts": [
+        {
+          "field": "bedrooms",
+          "description": 2,
+          "structured_field": 1
+        }
+      ],
+      "duplicate_group": null,
+      "duplicate_status": "candidate",
+      "quality_notes": [
+        "Bedroom conflict: description says 2; structured field says 1."
+      ],
+      "condition": null,
+      "legal_status": null,
+      "occupancy_status": null
+    }
+  ]
+}
