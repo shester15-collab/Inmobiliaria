@@ -26,5 +26,9 @@ python engine/estimator.py
 ## Criterios del motor
 - La similitud combina coincidencia física y cobertura ponderada: un campo ausente no es una coincidencia y reduce la puntuación. Los campos no numéricos, booleanos, cero o negativos se consideran inválidos para comparación.
 - Una superficie en `unknown_surface_m2` no se infiere como terreno ni construcción; queda fuera de la comparación hasta contar con evidencia.
-- `candidate_audit` conserva para cada publicación el dato original, su decisión y los motivos. Las publicaciones de un mismo `duplicate_group` se cuentan una vez en estadísticas, pero no se borran ni se confunden anuncios por tener el mismo precio.
+- La cobertura mínima predeterminada es 0.80 del peso comparable y se puede configurar con `estimate(..., min_coverage=...)`. Un anuncio por debajo de ese mínimo queda fuera aunque supere el umbral de similitud.
+- La evidencia se clasifica así: 0–1 comparables válidos devuelve `insufficient_comparables` y no devuelve referencia numérica; 2–4 devuelve `provisional` con `evidence_reasons`; 5 o más devuelve `orientative`. Estos umbrales son reglas operativas, no garantías de precisión.
+- `candidate_audit` conserva para cada publicación el dato original, su decisión y los motivos. Las publicaciones de un mismo `duplicate_group` se cuentan una vez en estadísticas, pero no se borran: se elige el registro con más campos comparables válidos y, en empate, el `id` lexicográficamente menor. La regla no depende del orden de entrada.
 - Las banderas en `price_review_flags` señalan precios que requieren revisión, incluidos los que caen fuera de una banda descriptiva IQR; no los excluyen automáticamente.
+- `confidence` es una etiqueta heurística, no una probabilidad ni una medida de precisión: sólo puede ser `medium` para un resultado `orientative`, con similitud promedio de al menos 75 y sin banderas de revisión de precio. No está calibrada con precios de cierre.
+- `reference_price_mxn` se calcula con precios anunciados seleccionados; no representa un precio de cierre ni una tasación profesional.

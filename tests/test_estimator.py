@@ -96,5 +96,81 @@ class PrototypeTests(unittest.TestCase):
         self.assertIn("duplicate", duplicate["reasons"][0])
         self.assertTrue(any("price" in flag for flag in result["price_review_flags"]))
 
+    def comparable(self, property_id, price_mxn, **changes):
+        property_ = {
+            "id": property_id, "source": "test", "url": f"https://example.test/{property_id}",
+            "price_mxn": price_mxn, "land_m2": 120, "construction_m2": 90,
+            "bedrooms": 2, "bathrooms": 1, "parking_spaces": 1, "floors": 1,
+            "quality_notes": [], "duplicate_group": None,
+        }
+        property_.update(changes)
+        return property_
+
+    def test_current_dataset_has_numeric_reference_range_and_selected_comparables(self):
+        target = {"land_m2": 120, "construction_m2": 90, "bedrooms": 2,
+                  "bathrooms": 1, "parking_spaces": 1, "floors": 1}
+        result = estimate(target, self.props)
+
+        self.assertEqual("orientative", result["status"])
+        self.assertEqual(1450000, result["reference_price_mxn"])
+        self.assertEqual([531056, 1900000], result["range_mxn"])
+        self.assertEqual("low", result["confidence"])
+        self.assertIn("no calibrada", result["confidence_note"])
+        self.assertEqual(["CASA-01", "CASA-02", "CASA-11", "CASA-10", "CASA-07", "CASA-03"],
+                         [item["id"] for item in result["comparables"]])
+
+    def test_zero_or_one_valid_comparable_has_no_numeric_reference(self):
+        target = {"land_m2": 120, "construction_m2": 90, "bedrooms": 2,
+                  "bathrooms": 1, "parking_spaces": 1, "floors": 1}
+        for properties, expected_count in (([], 0), ([self.comparable("ONE", 1000000)], 1)):
+            with self.subTest(count=expected_count):
+                result = estimate(target, properties)
+                self.assertEqual("insufficient_comparables", result["status"])
+                self.assertIsNone(result["reference_price_mxn"])
+                self.assertEqual(expected_count, result["comparables_count"])
+                self.assertTrue(result["evidence_reasons"])
+
+    def test_two_to_four_valid_comparables_are_provisional(self):
+        target = {"land_m2": 120, "construction_m2": 90, "bedrooms": 2,
+                  "bathrooms": 1, "parking_spaces": 1, "floors": 1}
+        properties = [self.comparable("A", 1000000), self.comparable("B", 1200000)]
+        result = estimate(target, properties)
+
+        self.assertEqual("provisional", result["status"])
+        self.assertEqual(2, result["comparables_count"])
+        self.assertEqual(1000000, result["reference_price_mxn"])
+        self.assertIn("limited", result["evidence_reasons"][0])
+
+    def test_minimum_coverage_is_configurable_and_excludes_low_coverage_match(self):
+        target = {"land_m2": 120, "construction_m2": 90, "bedrooms": 2,
+                  "bathrooms": 1, "parking_spaces": 1, "floors": 1}
+        sparse = self.comparable("SPARSE", 1000000, construction_m2=None, bedrooms=None,
+                                 bathrooms=None, parking_spaces=None, floors=None)
+        result = estimate(target, [sparse], min_score=0, min_coverage=.8)
+
+        self.assertEqual(0, result["comparables_count"])
+        audit = next(item for item in result["candidate_audit"] if item["id"] == "SPARSE")
+        self.assertIn("coverage_below_minimum", audit["reasons"])
+
+    def test_duplicate_representative_is_deterministic_when_prices_differ(self):
+        target = {"land_m2": 120, "construction_m2": 90, "bedrooms": 2,
+                  "bathrooms": 1, "parking_spaces": 1, "floors": 1}
+        later = self.comparable("DUP-B", 2000000, duplicate_group="DUP-TEST")
+        earlier = self.comparable("DUP-A", 1000000, duplicate_group="DUP-TEST")
+        result = estimate(target, [later, earlier])
+
+        self.assertEqual(["DUP-A"], [item["id"] for item in result["comparables"]])
+        self.assertIsNone(result["reference_price_mxn"])
+        excluded = next(item for item in result["candidate_audit"] if item["id"] == "DUP-B")
+        self.assertIn("duplicate", excluded["reasons"][0])
+
+    def test_price_review_flag_does_not_silently_exclude_selected_property(self):
+        target = {"land_m2": 120, "construction_m2": 90, "bedrooms": 2,
+                  "bathrooms": 1, "parking_spaces": 1, "floors": 1}
+        result = estimate(target, self.props)
+
+        self.assertIn("CASA-10", [item["id"] for item in result["comparables"]])
+        self.assertTrue(any(flag.startswith("CASA-10:") for flag in result["price_review_flags"]))
+
 if __name__ == "__main__":
     unittest.main()

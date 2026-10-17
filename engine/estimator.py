@@ -7,6 +7,9 @@ from statistics import median
 WEIGHTS = {"land_m2": .25, "construction_m2": .25, "bedrooms": .15,
            "bathrooms": .15, "parking_spaces": .10, "floors": .05}
 QUALITY_WEIGHT = .05
+DEFAULT_MIN_COVERAGE = .80
+MIN_PROVISIONAL_COMPARABLES = 2
+MIN_ORIENTATIVE_COMPARABLES = 5
 
 
 def _valid_value(value):
@@ -17,16 +20,22 @@ def load_dataset(path):
     with open(path, encoding="utf-8") as f:
         return json.load(f)
 
+def _completeness(property_):
+    return sum(_valid_value(property_.get(field)) for field in WEIGHTS)
+
+
 def unique_candidates(properties):
-    """Conservatively remove only manually reviewed probable duplicate groups."""
-    seen, out = set(), []
+    """Choose duplicate representatives by completeness, then stable ID, not input order."""
+    groups, out = {}, []
     for p in properties:
         group = p.get("duplicate_group")
         if group:
-            if group in seen:
-                continue
-            seen.add(group)
-        out.append(p)
+            groups.setdefault(group, []).append(p)
+        else:
+            out.append(p)
+    for group in sorted(groups):
+        representative = min(groups[group], key=lambda p: (-_completeness(p), p.get("id", "")))
+        out.append(representative)
     return out
 
 def field_similarity(target, candidate, field):
@@ -92,7 +101,10 @@ def _price_review_bounds(properties):
     iqr = q3 - q1
     return q1 - 1.5 * iqr, q3 + 1.5 * iqr
 
-def estimate(target, properties, min_score=55):
+def estimate(target, properties, min_score=55, min_coverage=DEFAULT_MIN_COVERAGE):
+    """Return an evidence-tiered reference from asking prices, never a closing-price appraisal."""
+    if not 0 <= min_coverage <= 1:
+        raise ValueError("min_coverage must be between 0 and 1")
     pool = unique_candidates(properties)
     representative_ids = {p["id"] for p in pool}
     lower_bound, upper_bound = _price_review_bounds(pool)
@@ -106,7 +118,11 @@ def estimate(target, properties, min_score=55):
                                     "reasons": ["invalid_or_missing_price"], "original": p})
             continue
         s = score_property(target, p)
-        if s["score"] is not None and s["score"] >= min_score:
+        if s["score"] is not None and s["coverage"] < min_coverage:
+            candidate_audit.append({"id": p["id"], "decision": "excluded",
+                                    "reasons": ["coverage_below_minimum"], "score_audit": s,
+                                    "price_review": review_reasons, "original": p})
+        elif s["score"] is not None and s["score"] >= min_score:
             scored.append({**p, "similarity_score": s["score"], "score_details": s["details"],
                            "score_audit": s, "price_review": review_reasons})
             candidate_audit.append({"id": p["id"], "decision": "included",
@@ -122,9 +138,15 @@ def estimate(target, properties, min_score=55):
                                     "reasons": ["probable_duplicate_group_represented_once"],
                                     "duplicate_group": p.get("duplicate_group"), "original": p})
     scored.sort(key=lambda x: x["similarity_score"], reverse=True)
-    if not scored:
+    comparable_output = [{"id":p["id"],"source":p["source"],"price_mxn":p["price_mxn"],
+                          "similarity_score":p["similarity_score"],"url":p["url"],
+                          "score_audit":p["score_audit"],"price_review":p["price_review"]}
+                         for p in scored]
+    if len(scored) < MIN_PROVISIONAL_COMPARABLES:
         return {"status":"insufficient_comparables","reference_price_mxn":None,
-                "range_mxn":None,"confidence":"low","comparables":[],
+                "range_mxn":None,"confidence":"low","comparables":comparable_output,
+                "comparables_count":len(scored),
+                "evidence_reasons":["fewer_than_two_valid_comparables"],
                 "input_publications_count": len(properties), "unique_properties_count": len(pool),
                 "candidate_audit": candidate_audit, "price_review_flags": price_review_flags}
     # Weighted median is more robust than weighted mean and less sensitive to price outliers.
@@ -142,20 +164,22 @@ def estimate(target, properties, min_score=55):
     lo = prices_sorted[max(0, int((len(prices_sorted)-1)*.25))]
     hi = prices_sorted[min(len(prices_sorted)-1, int((len(prices_sorted)-1)*.75))]
     avg_score = sum(p["similarity_score"] for p in scored)/len(scored)
-    if len(scored) >= 5 and avg_score >= 75:
+    evidence_reasons = []
+    status = "orientative" if len(scored) >= MIN_ORIENTATIVE_COMPARABLES else "provisional"
+    if status == "provisional":
+        evidence_reasons.append("limited_evidence_fewer_than_five_valid_comparables")
+    if status == "orientative" and avg_score >= 75 and not price_review_flags:
         confidence = "medium"
-    elif len(scored) >= 3 and avg_score >= 65:
-        confidence = "low-to-medium"
     else:
         confidence = "low"
-    return {"status":"provisional","reference_price_mxn":weighted_med,
+    return {"status":status,"reference_price_mxn":weighted_med,
             "range_mxn":[lo,hi],"range_note":"Rango descriptivo entre comparables seleccionados; no es intervalo estadístico de confianza.",
             "confidence":confidence,"comparables_count":len(scored),
+            "evidence_reasons":evidence_reasons,
+            "confidence_note":"Etiqueta heurística no calibrada con precios de cierre ni una probabilidad de precisión.",
             "input_publications_count": len(properties), "unique_properties_count": len(pool),
             "candidate_audit":candidate_audit, "price_review_flags":price_review_flags,
-            "comparables":[{"id":p["id"],"source":p["source"],"price_mxn":p["price_mxn"],
-                            "similarity_score":p["similarity_score"],"url":p["url"],
-                            "score_audit":p["score_audit"],"price_review":p["price_review"]} for p in scored]}
+            "comparables":comparable_output}
 
 if __name__ == "__main__":
     here = Path(__file__).resolve().parents[1]
