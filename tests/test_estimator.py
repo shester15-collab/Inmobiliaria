@@ -172,5 +172,55 @@ class PrototypeTests(unittest.TestCase):
         self.assertIn("CASA-10", [item["id"] for item in result["comparables"]])
         self.assertTrue(any(flag.startswith("CASA-10:") for flag in result["price_review_flags"]))
 
+    def test_current_dataset_reports_exact_descriptive_price_metrics(self):
+        target = {"land_m2": 120, "construction_m2": 90, "bedrooms": 2,
+                  "bathrooms": 1, "parking_spaces": 1, "floors": 1}
+        result = estimate(target, self.props)
+        metrics = result["price_metrics"]
+
+        self.assertEqual(6, metrics["comparables_count"])
+        self.assertEqual(1675000, metrics["median_price_mxn"])
+        self.assertAlmostEqual(1818690.1666666667, metrics["mean_price_mxn"])
+        self.assertAlmostEqual(1408513.4872184102, metrics["sample_standard_deviation_mxn"])
+        self.assertAlmostEqual(.7744658837629078, metrics["sample_coefficient_of_variation"])
+        self.assertEqual(760792, metrics["first_quartile_mxn"])
+        self.assertEqual(2237500, metrics["third_quartile_mxn"])
+        self.assertEqual(1476708, metrics["iqr_mxn"])
+        self.assertEqual(431085, metrics["min_price_mxn"])
+        self.assertEqual(4250000, metrics["max_price_mxn"])
+        self.assertEqual(
+            {"high_price_dispersion_heuristic", "price_review_flags_present",
+             "selected_comparables_have_missing_fields"},
+            {warning["code"] for warning in result["warnings"]},
+        )
+
+    def test_zero_and_one_comparable_metrics_mark_undefined_statistics_absent(self):
+        target = {"land_m2": 120, "construction_m2": 90, "bedrooms": 2,
+                  "bathrooms": 1, "parking_spaces": 1, "floors": 1}
+        empty = estimate(target, [])
+        one = estimate(target, [self.comparable("ONE", 1000000)])
+
+        self.assertEqual(0, empty["price_metrics"]["comparables_count"])
+        self.assertIsNone(empty["price_metrics"]["median_price_mxn"])
+        self.assertIsNone(empty["price_metrics"]["sample_standard_deviation_mxn"])
+        self.assertEqual({"limited_comparable_sample"},
+                         {warning["code"] for warning in empty["warnings"]})
+        self.assertEqual(1000000, one["price_metrics"]["mean_price_mxn"])
+        self.assertIsNone(one["price_metrics"]["sample_standard_deviation_mxn"])
+        self.assertIsNone(one["price_metrics"]["sample_coefficient_of_variation"])
+        self.assertIsNone(one["price_metrics"]["first_quartile_mxn"])
+
+    def test_inclusive_quartiles_are_interpolated_for_small_samples(self):
+        target = {"land_m2": 120, "construction_m2": 90, "bedrooms": 2,
+                  "bathrooms": 1, "parking_spaces": 1, "floors": 1}
+        result = estimate(target, [self.comparable("A", 1000000), self.comparable("B", 1200000)])
+        metrics = result["price_metrics"]
+
+        self.assertEqual(1050000, metrics["first_quartile_mxn"])
+        self.assertEqual(1150000, metrics["third_quartile_mxn"])
+        self.assertEqual(100000, metrics["iqr_mxn"])
+        self.assertEqual("provisional", result["status"])
+        self.assertIn("limited_comparable_sample", {warning["code"] for warning in result["warnings"]})
+
 if __name__ == "__main__":
     unittest.main()

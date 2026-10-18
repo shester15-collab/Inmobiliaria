@@ -10,6 +10,7 @@ QUALITY_WEIGHT = .05
 DEFAULT_MIN_COVERAGE = .80
 MIN_PROVISIONAL_COMPARABLES = 2
 MIN_ORIENTATIVE_COMPARABLES = 5
+DEFAULT_HIGH_PRICE_DISPERSION_CV = .50
 
 
 def _valid_value(value):
@@ -101,10 +102,67 @@ def _price_review_bounds(properties):
     iqr = q3 - q1
     return q1 - 1.5 * iqr, q3 + 1.5 * iqr
 
-def estimate(target, properties, min_score=55, min_coverage=DEFAULT_MIN_COVERAGE):
+
+def _inclusive_quartile(sorted_prices, probability):
+    """Interpolate on the inclusive (n - 1) quantile positions."""
+    position = (len(sorted_prices) - 1) * probability
+    lower = int(position)
+    upper = min(lower + 1, len(sorted_prices) - 1)
+    return sorted_prices[lower] + (sorted_prices[upper] - sorted_prices[lower]) * (position - lower)
+
+
+def _price_metrics(prices):
+    """Describe selected asking prices; these values are not prediction precision."""
+    metrics = {"comparables_count": len(prices), "median_price_mxn": None,
+               "mean_price_mxn": None, "sample_standard_deviation_mxn": None,
+               "sample_coefficient_of_variation": None, "first_quartile_mxn": None,
+               "third_quartile_mxn": None, "iqr_mxn": None,
+               "min_price_mxn": None, "max_price_mxn": None,
+               "quartile_method": "inclusive_linear_interpolation"}
+    if not prices:
+        return metrics
+    ordered = sorted(prices)
+    mean_price = sum(ordered) / len(ordered)
+    metrics.update({"median_price_mxn": median(ordered), "mean_price_mxn": mean_price,
+                    "min_price_mxn": ordered[0], "max_price_mxn": ordered[-1]})
+    if len(ordered) < 2:
+        return metrics
+    q1 = _inclusive_quartile(ordered, .25)
+    q3 = _inclusive_quartile(ordered, .75)
+    sample_variance = sum((price - mean_price) ** 2 for price in ordered) / (len(ordered) - 1)
+    sample_standard_deviation = sample_variance ** .5
+    metrics.update({"sample_standard_deviation_mxn": sample_standard_deviation,
+                    "sample_coefficient_of_variation": sample_standard_deviation / mean_price
+                    if mean_price else None,
+                    "first_quartile_mxn": q1, "third_quartile_mxn": q3,
+                    "iqr_mxn": q3 - q1})
+    return metrics
+
+
+def _descriptive_warnings(scored, metrics, price_review_flags, dispersion_warning_cv):
+    warnings = []
+    if metrics["comparables_count"] < MIN_ORIENTATIVE_COMPARABLES:
+        warnings.append({"code": "limited_comparable_sample",
+                         "message": "Fewer than five valid comparables; descriptive metrics are limited."})
+    if (metrics["sample_coefficient_of_variation"] is not None and
+            metrics["sample_coefficient_of_variation"] >= dispersion_warning_cv):
+        warnings.append({"code": "high_price_dispersion_heuristic",
+                         "message": "Price dispersion exceeds the configured descriptive CV warning threshold."})
+    if price_review_flags:
+        warnings.append({"code": "price_review_flags_present",
+                         "message": "Price review flags are present; listings remain included unless another rule excludes them."})
+    if any("missing" in item["score_audit"]["field_reasons"].values() for item in scored):
+        warnings.append({"code": "selected_comparables_have_missing_fields",
+                         "message": "Selected comparables contain fields unavailable for similarity comparison."})
+    return warnings
+
+def estimate(target, properties, min_score=55, min_coverage=DEFAULT_MIN_COVERAGE,
+             dispersion_warning_cv=DEFAULT_HIGH_PRICE_DISPERSION_CV):
     """Return an evidence-tiered reference from asking prices, never a closing-price appraisal."""
     if not 0 <= min_coverage <= 1:
         raise ValueError("min_coverage must be between 0 and 1")
+    if dispersion_warning_cv < 0:
+        raise ValueError("dispersion_warning_cv must be non-negative")
     pool = unique_candidates(properties)
     representative_ids = {p["id"] for p in pool}
     lower_bound, upper_bound = _price_review_bounds(pool)
@@ -142,11 +200,15 @@ def estimate(target, properties, min_score=55, min_coverage=DEFAULT_MIN_COVERAGE
                           "similarity_score":p["similarity_score"],"url":p["url"],
                           "score_audit":p["score_audit"],"price_review":p["price_review"]}
                          for p in scored]
+    prices = [p["price_mxn"] for p in scored]
+    price_metrics = _price_metrics(prices)
+    warnings = _descriptive_warnings(scored, price_metrics, price_review_flags, dispersion_warning_cv)
     if len(scored) < MIN_PROVISIONAL_COMPARABLES:
         return {"status":"insufficient_comparables","reference_price_mxn":None,
                 "range_mxn":None,"confidence":"low","comparables":comparable_output,
                 "comparables_count":len(scored),
                 "evidence_reasons":["fewer_than_two_valid_comparables"],
+                "price_metrics":price_metrics, "warnings":warnings,
                 "input_publications_count": len(properties), "unique_properties_count": len(pool),
                 "candidate_audit": candidate_audit, "price_review_flags": price_review_flags}
     # Weighted median is more robust than weighted mean and less sensitive to price outliers.
@@ -158,7 +220,6 @@ def estimate(target, properties, min_score=55, min_coverage=DEFAULT_MIN_COVERAGE
         if acc >= total/2:
             weighted_med = price
             break
-    prices = [p["price_mxn"] for p in scored]
     # Descriptive range is P25-P75 of selected asking prices; not a confidence interval.
     prices_sorted = sorted(prices)
     lo = prices_sorted[max(0, int((len(prices_sorted)-1)*.25))]
@@ -177,6 +238,7 @@ def estimate(target, properties, min_score=55, min_coverage=DEFAULT_MIN_COVERAGE
             "confidence":confidence,"comparables_count":len(scored),
             "evidence_reasons":evidence_reasons,
             "confidence_note":"Etiqueta heurística no calibrada con precios de cierre ni una probabilidad de precisión.",
+            "price_metrics":price_metrics,"warnings":warnings,
             "input_publications_count": len(properties), "unique_properties_count": len(pool),
             "candidate_audit":candidate_audit, "price_review_flags":price_review_flags,
             "comparables":comparable_output}
