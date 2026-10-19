@@ -1,8 +1,10 @@
 import json
 import tempfile
 import unittest
+from copy import deepcopy
 from pathlib import Path
-from engine.estimator import load_dataset, unique_candidates, score_property, estimate
+from engine.estimator import (estimate, load_dataset, score_property, unique_candidates,
+                              validate_properties, validate_property)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -98,7 +100,8 @@ class PrototypeTests(unittest.TestCase):
 
     def comparable(self, property_id, price_mxn, **changes):
         property_ = {
-            "id": property_id, "source": "test", "url": f"https://example.test/{property_id}",
+            "id": property_id, "source": "test", "source_id": f"source-{property_id}",
+            "url": f"https://example.test/{property_id}",
             "price_mxn": price_mxn, "land_m2": 120, "construction_m2": 90,
             "bedrooms": 2, "bathrooms": 1, "parking_spaces": 1, "floors": 1,
             "quality_notes": [], "duplicate_group": None,
@@ -221,6 +224,130 @@ class PrototypeTests(unittest.TestCase):
         self.assertEqual(100000, metrics["iqr_mxn"])
         self.assertEqual("provisional", result["status"])
         self.assertIn("limited_comparable_sample", {warning["code"] for warning in result["warnings"]})
+
+    def test_validation_reports_invalid_identity_and_traceability_fields(self):
+        for changes, expected_code in [
+            ({"id": None}, "missing_id"), ({"id": "  "}, "missing_id"),
+            ({"id": 12}, "invalid_id"), ({"id": []}, "invalid_id"),
+            ({"id": {}}, "invalid_id"), ({"source": ""}, "missing_source"),
+            ({"source_id": None}, "missing_source_id"),
+        ]:
+            with self.subTest(changes=changes):
+                result = validate_property(self.comparable("VALID", 1000000, **changes))
+                self.assertIn(expected_code, {item["code"] for item in result["errors"]})
+        for field, expected_code in (("id", "missing_id"), ("source", "missing_source"),
+                                     ("source_id", "missing_source_id")):
+            with self.subTest(absent=field):
+                property_ = self.comparable("VALID", 1000000)
+                del property_[field]
+                result = validate_property(property_)
+                self.assertIn(expected_code, {item["code"] for item in result["errors"]})
+        collection_results = validate_properties([
+            self.comparable("VALID", 1000000, id=[]),
+            self.comparable("OTHER", 1200000, id={}),
+        ])
+        for result in collection_results:
+            self.assertIn("invalid_id", {item["code"] for item in result["errors"]})
+
+    def test_validation_reports_duplicate_identifiers_for_each_affected_record(self):
+        properties = [self.comparable("DUP", 1000000), self.comparable("DUP", 1200000)]
+        results = validate_properties(properties)
+
+        self.assertEqual(2, len(results))
+        for result in results:
+            self.assertIn("duplicate_id", {item["code"] for item in result["errors"]})
+
+    def test_validation_rejects_objectively_invalid_prices(self):
+        for value in (0, -1, True, "1000000", float("nan"), float("inf")):
+            with self.subTest(value=value):
+                result = validate_property(self.comparable("PRICE", value))
+                self.assertIn("invalid_price_mxn", {item["code"] for item in result["errors"]})
+
+    def test_validation_reports_invalid_surfaces_without_reinterpreting_them(self):
+        for value in (0, -1, True, "120", float("nan"), float("inf")):
+            for field in ("land_m2", "construction_m2", "unknown_surface_m2"):
+                with self.subTest(field=field, value=value):
+                    result = validate_property(self.comparable("SURFACE", 1000000, **{field: value}))
+                    self.assertIn(f"invalid_{field}", {item["code"] for item in result["errors"]})
+
+    def test_validation_reports_invalid_counts(self):
+        for value in (1.5, 0, -1, True, "2"):
+            for field in ("bedrooms", "bathrooms", "parking_spaces", "floors"):
+                with self.subTest(field=field, value=value):
+                    result = validate_property(self.comparable("COUNT", 1000000, **{field: value}))
+                    self.assertIn(f"invalid_{field}", {item["code"] for item in result["errors"]})
+
+    def test_optional_unknown_fields_are_warnings_not_errors(self):
+        property_ = self.comparable("UNKNOWN", 1000000, land_m2=None, construction_m2=None,
+                                    bedrooms=None, bathrooms=None, parking_spaces=None, floors=None)
+        result = validate_property(property_)
+
+        self.assertEqual([], result["errors"])
+        self.assertIn("unknown_land_m2", {item["code"] for item in result["warnings"]})
+        self.assertIn("unknown_bedrooms", {item["code"] for item in result["warnings"]})
+
+    def test_source_conflicts_and_quality_notes_require_manual_review(self):
+        property_ = self.comparable(
+            "CONFLICT", 1000000,
+            source_conflicts=[{"field": "bedrooms", "description": 2, "structured_field": 1}],
+            quality_notes=["Possible price anomaly; verify listing conditions."],
+        )
+        result = validate_property(property_)
+
+        self.assertEqual([], result["errors"])
+        self.assertEqual({"source_conflicts_present", "quality_notes_require_review"},
+                         {item["code"] for item in result["manual_review"]})
+
+    def test_ambiguous_and_provisional_surfaces_remain_warnings(self):
+        ambiguous = self.comparable("AMBIGUOUS", 1000000, unknown_surface_m2=80,
+                                    quality_notes=["80 m² surface type unspecified."])
+        provisional = self.comparable("PROVISIONAL", 1000000,
+                                      quality_notes=["Surface mapping is provisional."])
+
+        self.assertIn("ambiguous_surface", {item["code"] for item in validate_property(ambiguous)["warnings"]})
+        self.assertIn("provisional_surface_mapping",
+                      {item["code"] for item in validate_property(provisional)["warnings"]})
+
+    def test_validation_marks_probable_duplicates_and_semantic_surface_cases_for_review(self):
+        duplicate = self.comparable("DUPLICATE", 1000000, duplicate_group="DUP-TEST")
+        multi_floor = self.comparable("MULTI", 1000000, land_m2=100, construction_m2=150)
+
+        self.assertIn("probable_duplicate_group", {item["code"] for item in validate_property(duplicate)["manual_review"]})
+        semantic = validate_property(multi_floor)
+        self.assertEqual([], semantic["errors"])
+        self.assertIn("construction_exceeds_land", {item["code"] for item in semantic["manual_review"]})
+
+    def test_validation_is_immutable_and_current_dataset_has_no_errors(self):
+        property_ = self.comparable("IMMUTABLE", 1000000)
+        original = deepcopy(property_)
+
+        validate_property(property_)
+        validate_properties([property_])
+
+        self.assertEqual(original, property_)
+        validations = validate_properties(self.props)
+        for result in validations:
+            self.assertEqual([], result["errors"])
+        by_id = {property_["id"]: result for property_, result in zip(self.props, validations)}
+        self.assertIn("probable_duplicate_group",
+                      {item["code"] for item in by_id["CASA-03"]["manual_review"]})
+        self.assertIn("source_conflicts_present",
+                      {item["code"] for item in by_id["CASA-11"]["manual_review"]})
+        self.assertIn("quality_notes_require_review",
+                      {item["code"] for item in by_id["CASA-10"]["manual_review"]})
+
+    def test_blocking_validation_errors_exclude_only_the_affected_record_with_audit(self):
+        target = {"land_m2": 120, "construction_m2": 90, "bedrooms": 2,
+                  "bathrooms": 1, "parking_spaces": 1, "floors": 1}
+        valid = self.comparable("VALID", 1000000)
+        invalid_price = self.comparable("INVALID", 0)
+        result = estimate(target, [valid, invalid_price])
+
+        self.assertEqual(["VALID"], [item["id"] for item in result["comparables"]])
+        audit = next(item for item in result["candidate_audit"] if item["id"] == "INVALID")
+        self.assertEqual("excluded", audit["decision"])
+        self.assertIn("validation_errors", audit["reasons"])
+        self.assertIn("invalid_price_mxn", {item["code"] for item in audit["validation"]["errors"]})
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,5 +1,6 @@
 """Prototype comparable-property engine. Python 3.10+; standard library only."""
 import json
+from math import isfinite
 from numbers import Real
 from pathlib import Path
 from statistics import median
@@ -11,11 +12,83 @@ DEFAULT_MIN_COVERAGE = .80
 MIN_PROVISIONAL_COMPARABLES = 2
 MIN_ORIENTATIVE_COMPARABLES = 5
 DEFAULT_HIGH_PRICE_DISPERSION_CV = .50
+SURFACE_FIELDS = ("land_m2", "construction_m2", "unknown_surface_m2")
+COUNT_FIELDS = ("bedrooms", "bathrooms", "half_bathrooms", "parking_spaces", "floors")
+BLOCKING_VALIDATION_ERRORS = frozenset({
+    "missing_id", "invalid_id", "duplicate_id", "missing_source", "invalid_source",
+    "missing_source_id", "invalid_source_id", "invalid_price_mxn",
+})
 
 
 def _valid_value(value):
     """Return whether a comparable numeric value is a positive real number."""
-    return isinstance(value, Real) and not isinstance(value, bool) and value > 0
+    return isinstance(value, Real) and not isinstance(value, bool) and isfinite(value) and value > 0
+
+
+def _issue(code, message):
+    return {"code": code, "message": message}
+
+
+def _required_string_issues(property_, field, errors):
+    value = property_.get(field)
+    if value is None or (isinstance(value, str) and not value.strip()):
+        errors.append(_issue(f"missing_{field}", f"{field} is required for traceability."))
+    elif not isinstance(value, str):
+        errors.append(_issue(f"invalid_{field}", f"{field} must be a non-empty string."))
+
+
+def validate_property(property_, duplicate_ids=frozenset()):
+    """Purely classify one listing's objective errors, warnings, and manual-review needs."""
+    errors, warnings, manual_review = [], [], []
+    for field in ("id", "source", "source_id"):
+        _required_string_issues(property_, field, errors)
+    property_id = property_.get("id")
+    if isinstance(property_id, str) and property_id in duplicate_ids:
+        errors.append(_issue("duplicate_id", "id appears more than once in the supplied collection."))
+    price = property_.get("price_mxn")
+    if not _valid_value(price):
+        errors.append(_issue("invalid_price_mxn", "price_mxn must be a finite positive number."))
+    for field in SURFACE_FIELDS:
+        value = property_.get(field)
+        if value is None:
+            warnings.append(_issue(f"unknown_{field}", f"{field} is unknown and is not inferred."))
+        elif not _valid_value(value):
+            errors.append(_issue(f"invalid_{field}", f"{field} must be a finite positive number when declared."))
+    for field in COUNT_FIELDS:
+        value = property_.get(field)
+        if value is None:
+            warnings.append(_issue(f"unknown_{field}", f"{field} is unknown and cannot support comparison."))
+        elif not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            errors.append(_issue(f"invalid_{field}", f"{field} must be a positive integer when declared."))
+    url = property_.get("url")
+    if not isinstance(url, str) or not url.strip():
+        warnings.append(_issue("missing_url", "url is unavailable for traceability review."))
+    if property_.get("unknown_surface_m2") is not None:
+        warnings.append(_issue("ambiguous_surface", "Unknown surface is retained without assigning it to land or construction."))
+    notes = property_.get("quality_notes") or []
+    if any("provisional" in str(note).lower() for note in notes):
+        warnings.append(_issue("provisional_surface_mapping", "A surface mapping is marked as provisional."))
+    if property_.get("source_conflicts"):
+        manual_review.append(_issue("source_conflicts_present", "Source values conflict and require human review."))
+    if property_.get("duplicate_group"):
+        manual_review.append(_issue("probable_duplicate_group", "Listing belongs to a probable, not confirmed, duplicate group."))
+    if notes:
+        manual_review.append(_issue("quality_notes_require_review", "Listing quality notes require human review."))
+    land, construction = property_.get("land_m2"), property_.get("construction_m2")
+    if _valid_value(land) and _valid_value(construction) and construction > land:
+        manual_review.append(_issue("construction_exceeds_land", "Construction exceeds land; this can be valid for multiple floors and requires review."))
+    return {"errors": errors, "warnings": warnings, "manual_review": manual_review}
+
+
+def validate_properties(properties):
+    """Purely validate a collection and report duplicate IDs on every affected record."""
+    id_counts = {}
+    for property_ in properties:
+        property_id = property_.get("id")
+        if isinstance(property_id, str) and property_id.strip():
+            id_counts[property_id] = id_counts.get(property_id, 0) + 1
+    duplicate_ids = frozenset(property_id for property_id, count in id_counts.items() if count > 1)
+    return [validate_property(property_, duplicate_ids) for property_ in properties]
 
 def load_dataset(path):
     with open(path, encoding="utf-8") as f:
@@ -163,38 +236,58 @@ def estimate(target, properties, min_score=55, min_coverage=DEFAULT_MIN_COVERAGE
         raise ValueError("min_coverage must be between 0 and 1")
     if dispersion_warning_cv < 0:
         raise ValueError("dispersion_warning_cv must be non-negative")
-    pool = unique_candidates(properties)
+    validations = validate_properties(properties)
+    validation_by_identity = {id(property_): validation
+                              for property_, validation in zip(properties, validations)}
+    candidate_audit = []
+    eligible_properties = []
+    for property_ in properties:
+        validation = validation_by_identity[id(property_)]
+        error_codes = {issue["code"] for issue in validation["errors"]}
+        if error_codes & BLOCKING_VALIDATION_ERRORS:
+            candidate_audit.append({"id": property_.get("id"), "decision": "excluded",
+                                    "reasons": ["validation_errors"], "validation": validation,
+                                    "original": property_})
+        else:
+            eligible_properties.append(property_)
+    pool = unique_candidates(eligible_properties)
     representative_ids = {p["id"] for p in pool}
     lower_bound, upper_bound = _price_review_bounds(pool)
-    scored, candidate_audit, price_review_flags = [], [], []
+    scored, price_review_flags = [], []
     for p in pool:
+        validation = validation_by_identity[id(p)]
         review_reasons = _price_review_reasons(p, lower_bound, upper_bound)
         if review_reasons:
             price_review_flags.extend(f"{p['id']}: {reason}" for reason in review_reasons)
         if not _valid_value(p.get("price_mxn")):
             candidate_audit.append({"id": p.get("id"), "decision": "excluded",
-                                    "reasons": ["invalid_or_missing_price"], "original": p})
+                                    "reasons": ["invalid_or_missing_price"], "validation": validation,
+                                    "original": p})
             continue
         s = score_property(target, p)
         if s["score"] is not None and s["coverage"] < min_coverage:
             candidate_audit.append({"id": p["id"], "decision": "excluded",
                                     "reasons": ["coverage_below_minimum"], "score_audit": s,
-                                    "price_review": review_reasons, "original": p})
+                                    "price_review": review_reasons, "validation": validation,
+                                    "original": p})
         elif s["score"] is not None and s["score"] >= min_score:
             scored.append({**p, "similarity_score": s["score"], "score_details": s["details"],
                            "score_audit": s, "price_review": review_reasons})
             candidate_audit.append({"id": p["id"], "decision": "included",
                                     "reasons": ["meets_minimum_score"], "score_audit": s,
-                                    "price_review": review_reasons, "original": p})
+                                    "price_review": review_reasons, "validation": validation,
+                                    "original": p})
         else:
             reason = "no_comparable_valid_fields" if s["score"] is None else "below_minimum_score"
             candidate_audit.append({"id": p["id"], "decision": "excluded", "reasons": [reason],
-                                    "score_audit": s, "price_review": review_reasons, "original": p})
-    for p in properties:
+                                    "score_audit": s, "price_review": review_reasons,
+                                    "validation": validation, "original": p})
+    for p in eligible_properties:
         if p["id"] not in representative_ids:
             candidate_audit.append({"id": p["id"], "decision": "excluded",
                                     "reasons": ["probable_duplicate_group_represented_once"],
-                                    "duplicate_group": p.get("duplicate_group"), "original": p})
+                                    "duplicate_group": p.get("duplicate_group"),
+                                    "validation": validation_by_identity[id(p)], "original": p})
     scored.sort(key=lambda x: x["similarity_score"], reverse=True)
     comparable_output = [{"id":p["id"],"source":p["source"],"price_mxn":p["price_mxn"],
                           "similarity_score":p["similarity_score"],"url":p["url"],
