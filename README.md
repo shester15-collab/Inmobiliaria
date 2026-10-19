@@ -44,3 +44,11 @@ La `reference_price_mxn` continúa siendo una mediana ponderada por similitud. E
 `warnings` aporta contexto sin cambiar comparables, referencia, rango, estado ni confianza. Informa de muestra menor a cinco comparables, dispersión alta, banderas de revisión de precio y campos faltantes entre los comparables seleccionados. La advertencia de dispersión usa el parámetro configurable `dispersion_warning_cv`, cuyo valor predeterminado es 0.50; es un umbral heurístico no calibrado, no una regla de precisión estadística.
 
 Todas las métricas describen precios anunciados. No sustituyen precios reales de cierre, una tasación profesional ni una estimación predictiva validada con datos independientes.
+
+## Validación de calidad de datos
+
+`validate_property` y `validate_properties` son validadores puros: no corrigen, normalizan ni eliminan publicaciones. Cada resultado contiene `errors`, `warnings` y `manual_review`, con códigos estables y descripciones breves. La auditoría de cada candidato incorpora ese resultado bajo `validation` y conserva el registro original.
+
+Los errores bloqueantes para participar en la estimación son identidad inválida o duplicada, fuente o `source_id` ausentes o inválidos, y precio no numérico, booleano, no finito, cero o negativo. Las superficies y conteos opcionales inválidos se reportan como errores del campo, pero no inventan datos ni eliminan por sí solos el registro: el motor ya los trata como no comparables para ese atributo.
+
+Los valores opcionales `null` son desconocidos, no errores bloqueantes. Generan advertencias junto con superficies ambiguas, mapeos provisionales y URL ausente. Los conflictos de fuente, grupos de duplicados probables, notas de calidad y construcción mayor que terreno se envían a `manual_review`; ninguno se resuelve automáticamente ni clasifica por sí mismo una propiedad como inválida. Una construcción mayor que terreno puede ser coherente con varias plantas, y un precio atípico sólo requiere revisión.
